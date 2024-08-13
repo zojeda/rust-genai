@@ -3,6 +3,10 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 pub trait ValueExt {
+	/// Will return an optional value T for a given name/pointer path.
+	/// - `name` - can be the direct name, or pointer path if starts with '/'
+	fn x_get_opt<T: DeserializeOwned>(&self, name: &str) -> Option<Result<T>>;
+
 	/// Will return the value T for a given name/pointer path.
 	/// - `name` - can be the direct name, or pointer path if starts with '/'
 	fn x_get<T: DeserializeOwned>(&self, name: &str) -> Result<T>;
@@ -22,6 +26,16 @@ pub trait ValueExt {
 }
 
 impl ValueExt for Value {
+	fn x_get_opt<T: DeserializeOwned>(&self, path: &str) -> Option<Result<T>> {
+		let value = if path.starts_with('/') {
+			self.pointer(path)
+		} else {
+			self.get(path)
+		};
+
+		value.map(|v| serde_json::from_value(v.clone()).map_err(|e| Error::SerdeJson(e)))
+	}
+
 	fn x_get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
 		let value = if path.starts_with('/') {
 			self.pointer(path).ok_or_else(|| Error::PropertyNotFound(path.to_string()))?

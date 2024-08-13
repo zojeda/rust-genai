@@ -49,6 +49,7 @@ impl ChatRequest {
 			.chain(self.messages.iter().filter_map(|message| match message.role {
 				ChatRole::System => match message.content {
 					MessageContent::Text(ref content) => Some(content.as_str()),
+					MessageContent::ToolCalls(_) => None,
 				},
 				_ => None,
 			}))
@@ -116,6 +117,20 @@ impl ChatMessage {
 			extra: None,
 		}
 	}
+	pub fn tool_calls(content: impl Into<MessageContent>) -> Self {
+		Self {
+			role: ChatRole::Assistant,
+			content: content.into(),
+			extra: None,
+		}
+	}
+	pub fn tool_result(content: impl Into<MessageContent>, tool_id: String) -> Self {
+		Self {
+			role: ChatRole::Tool,
+			content: content.into(),
+			extra: Some(MessageExtra::Tool(ToolExtra { tool_id })),
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +149,7 @@ pub enum MessageExtra {
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct ToolExtra {
-	tool_id: String,
+	pub tool_id: String,
 }
 
 // endregion: --- ChatMessage

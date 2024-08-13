@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use crate::adapter::{Adapter, AdapterDispatcher, AdapterKind, ServiceType, WebRequestData};
-use crate::chat::{ChatOptions, ChatRequest, ChatOptionsSet, ChatResponse, ChatStreamResponse};
+use crate::chat::{
+	ChatMessage, ChatOptions, ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse, MessageContent, Response,
+};
 use crate::client::Client;
 use crate::{ConfigSet, Error, ModelInfo, Result};
 
@@ -36,7 +40,9 @@ impl Client {
 			None => AdapterKind::from_model(model)?,
 		};
 
-		Ok(ModelInfo::new(adapter_kind, model))
+		let tools = self.inner.tools_manager.clone();
+		let tools = tools.map(|t| Arc::new(t));
+		Ok(ModelInfo::new(adapter_kind, model, tools))
 	}
 
 	/// Execute a chat
@@ -65,8 +71,8 @@ impl Client {
 			model_info.clone(),
 			&config_set,
 			ServiceType::Chat,
-			chat_req,
-			options_set,
+			chat_req.clone(),
+			options_set.clone(),
 		)?;
 
 		let web_res =
@@ -78,9 +84,47 @@ impl Client {
 					webc_error,
 				})?;
 
-		let chat_res = AdapterDispatcher::to_chat_response(model_info, web_res)?;
+		let chat_res = AdapterDispatcher::to_chat_response(model_info.clone(), web_res)?;
+		if let Response::FunctionCalls(function_calls) = chat_res.response {
+			let calls_manager = model_info.clone().tools.unwrap();
+			let function_call_results = function_calls
+				.iter()
+				.map(|function_call| {
+					let result = calls_manager.handle_call(&function_call, function_call.arguments.clone());
+					result
+				})
+				.collect::<Vec<_>>();
+			let mut new_req = chat_req.clone();
+			new_req
+				.messages
+				.push(ChatMessage::tool_calls(MessageContent::tool_calls(function_calls)));
+			for result in function_call_results {
+				new_req.messages.push(ChatMessage::tool_result(
+					MessageContent::text(result.result.to_string()),
+					result.call_id,
+				));
+			}
+			let WebRequestData { headers, payload, url } = AdapterDispatcher::to_web_request_data(
+				model_info.clone(),
+				&config_set,
+				ServiceType::Chat,
+				new_req,
+				options_set,
+			)?;
 
-		Ok(chat_res)
+			let web_res =
+				self.web_client()
+					.do_post(&url, &headers, payload)
+					.await
+					.map_err(|webc_error| Error::WebModelCall {
+						model_info: model_info.clone(),
+						webc_error,
+					})?;
+			let chat_res = AdapterDispatcher::to_chat_response(model_info.clone(), web_res)?;
+			Ok(chat_res)
+		} else {
+			Ok(chat_res)
+		}
 	}
 
 	pub async fn exec_chat_stream(

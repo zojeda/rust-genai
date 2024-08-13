@@ -1,5 +1,6 @@
 use crate::adapter::{AdapterConfig, AdapterKind};
 use crate::client::ClientConfig;
+use crate::tools::ToolsManager;
 use crate::webc::WebClient;
 use crate::ClientBuilder;
 use std::collections::HashMap;
@@ -49,6 +50,9 @@ impl Client {
 
 #[derive(Debug)]
 pub(super) struct ClientInner {
+	#[allow(unused)]
+	pub(super) tools_manager: Option<ToolsManager>,
+
 	#[allow(unused)]
 	pub(super) adapter_config_by_kind: Option<HashMap<AdapterKind, AdapterConfig>>,
 

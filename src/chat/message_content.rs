@@ -1,14 +1,20 @@
+use super::FunctionCall;
+
 /// For now, supports only Text,
 /// But the goal is to support multi-part message content (see below)
 #[derive(Debug, Clone)]
 pub enum MessageContent {
 	Text(String),
+	ToolCalls(Vec<FunctionCall>),
 }
 
 /// Constructors
 impl MessageContent {
 	pub fn text(content: impl Into<String>) -> Self {
 		MessageContent::Text(content.into())
+	}
+	pub fn tool_calls(tool_calls: Vec<FunctionCall>) -> Self {
+		MessageContent::ToolCalls(tool_calls)
 	}
 }
 
@@ -21,6 +27,7 @@ impl MessageContent {
 	pub fn text_as_str(&self) -> Option<&str> {
 		match self {
 			MessageContent::Text(content) => Some(content.as_str()),
+			MessageContent::ToolCalls(_) => None,
 		}
 	}
 
@@ -32,6 +39,7 @@ impl MessageContent {
 	pub fn text_into_string(self) -> Option<String> {
 		match self {
 			MessageContent::Text(content) => Some(content),
+			MessageContent::ToolCalls(_) => None,
 		}
 	}
 
@@ -40,6 +48,7 @@ impl MessageContent {
 	pub fn is_empty(&self) -> bool {
 		match self {
 			MessageContent::Text(content) => content.is_empty(),
+			MessageContent::ToolCalls(_) => true,
 		}
 	}
 }

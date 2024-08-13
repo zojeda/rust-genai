@@ -1,4 +1,4 @@
-use super::groq::MODELS as GROQ_MODELS;
+// use super::groq::MODELS as GROQ_MODELS;
 use crate::Result;
 use derive_more::Display;
 
@@ -57,8 +57,8 @@ impl AdapterKind {
 			Ok(Self::Cohere)
 		} else if model.starts_with("gemini") {
 			Ok(Self::Gemini)
-		} else if GROQ_MODELS.contains(&model) {
-			return Ok(Self::Groq);
+		// } else if GROQ_MODELS.contains(&model) {
+		// 	return Ok(Self::Groq);
 		}
 		// for now, fallback on Ollama
 		else {

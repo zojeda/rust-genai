@@ -1,4 +1,5 @@
 use crate::adapter::AdapterKind;
+use crate::tools::ToolsManager;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -10,13 +11,19 @@ use std::sync::Arc;
 pub struct ModelInfo {
 	pub adapter_kind: AdapterKind,
 	pub model_name: ModelName,
+	pub(crate) tools: Option<Arc<ToolsManager>>,
 }
 
 impl ModelInfo {
-	pub fn new(adapter_kind: AdapterKind, model_name: impl Into<ModelName>) -> Self {
+	pub(crate) fn new(
+		adapter_kind: AdapterKind,
+		model_name: impl Into<ModelName>,
+		tools: Option<Arc<ToolsManager>>,
+	) -> Self {
 		Self {
 			adapter_kind,
 			model_name: model_name.into(),
+			tools,
 		}
 	}
 }
@@ -29,6 +36,7 @@ where
 		Self {
 			adapter_kind,
 			model_name: model_name.into(),
+			tools: None,
 		}
 	}
 }

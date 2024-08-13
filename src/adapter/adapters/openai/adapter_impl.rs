@@ -2,12 +2,13 @@ use crate::adapter::openai::OpenAIStreamer;
 use crate::adapter::support::get_api_key_resolver;
 use crate::adapter::{Adapter, AdapterConfig, AdapterKind, ServiceType, WebRequestData};
 use crate::chat::{
-	ChatOptionsSet, ChatRequest, ChatResponse, ChatRole, ChatStream, ChatStreamResponse, MessageContent, MetaUsage,
+	ChatOptionsSet, ChatRequest, ChatResponse, ChatRole, ChatStream, ChatStreamResponse, FunctionCall, MessageContent,
+	MessageExtra, MetaUsage, Response, ToolExtra,
 };
 use crate::support::value_ext::ValueExt;
 use crate::webc::WebResponse;
 use crate::{ConfigSet, ModelInfo};
-use crate::{Error, Result};
+use crate::Result;
 use reqwest::RequestBuilder;
 use reqwest_eventsource::EventSource;
 use serde_json::{json, Value};
@@ -53,10 +54,35 @@ impl Adapter for OpenAIAdapter {
 		let usage = body.x_take("usage").map(OpenAIAdapter::into_usage).unwrap_or_default();
 
 		let first_choice: Option<Value> = body.x_take("/choices/0")?;
-		let content: Option<String> = first_choice.map(|mut c| c.x_take("/message/content")).transpose()?;
-		let content = content.map(MessageContent::from);
+		let tool_call: Option<Value> = first_choice
+			.clone()
+			.map(|c| c.x_get_opt("/message/tool_calls"))
+			.flatten()
+			.transpose()?;
 
-		Ok(ChatResponse { content, usage })
+		if let Some(Value::Array(tool_calls)) = tool_call {
+			let function_calls = tool_calls
+				.iter()
+				.map(|tc| {
+					let id: String = tc.x_get("/id").unwrap();
+					let name: String = tc.x_get("/function/name").unwrap();
+					let arguments: String = tc.x_get("/function/arguments").unwrap();
+					let arguments = serde_json::from_str(&arguments).unwrap();
+
+					FunctionCall { id, name, arguments }
+				})
+				.collect::<Vec<_>>();
+
+			let response = Response::FunctionCalls(function_calls);
+			Ok(ChatResponse { response, usage })
+		} else {
+			let content: Option<String> = first_choice.map(|mut c| c.x_take("/message/content")).transpose()?;
+
+			let content = content.map(MessageContent::from);
+
+			let response = Response::Content(content);
+			Ok(ChatResponse { response, usage })
+		}
 	}
 
 	fn to_chat_stream(
@@ -104,7 +130,7 @@ impl OpenAIAdapter {
 
 		// -- Build the basic payload
 		let model_name = model_info.model_name.to_string();
-		let OpenAIRequestParts { messages } = Self::into_openai_request_parts(model_info, chat_req)?;
+		let OpenAIRequestParts { messages } = Self::into_openai_request_parts(model_info.clone(), chat_req)?;
 		let mut payload = json!({
 			"model": model_name,
 			"messages": messages,
@@ -130,6 +156,26 @@ impl OpenAIAdapter {
 		}
 		if let Some(top_p) = options_set.top_p() {
 			payload.x_insert("top_p", top_p)?;
+		}
+
+		// -- Tools
+		if let Some(tools) = model_info.tools {
+			let openai_tools = tools
+				.specifications()
+				.iter()
+				.map(|t| {
+					json!({
+							"type": "function",
+							"function": {
+								"name": t.name.clone(),
+								"description": t.description.clone(),
+								"parameters": t.parameters.clone()
+
+							}
+					})
+				})
+				.collect::<Vec<_>>();
+			payload.x_insert("tools", openai_tools)?;
 		}
 
 		Ok(WebRequestData { url, headers, payload })
@@ -170,25 +216,46 @@ impl OpenAIAdapter {
 
 		for msg in chat_req.messages {
 			// Note: Will handle more types later
-			let MessageContent::Text(content) = msg.content;
-
-			match msg.role {
-				// for now, system and tool goes to system
-				ChatRole::System => {
-					// see note in the function comment
-					if ollama_variant {
-						system_messages.push(content);
-					} else {
-						messages.push(json!({"role": "system", "content": content}))
+			match msg.content {
+				MessageContent::Text(content) => {
+					match msg.role {
+						// for now, system and tool goes to system
+						ChatRole::System => {
+							// see note in the function comment
+							if ollama_variant {
+								system_messages.push(content);
+							} else {
+								messages.push(json!({"role": "system", "content": content}))
+							}
+						}
+						ChatRole::User => messages.push(json! ({"role": "user", "content": content})),
+						ChatRole::Assistant => messages.push(json! ({"role": "assistant", "content": content})),
+						ChatRole::Tool => {
+							if let Some(MessageExtra::Tool(ToolExtra { tool_id })) = msg.extra {
+								messages.push(json! ({"role": "tool", "content": content, "tool_call_id": tool_id}))
+							}
+						}
 					}
 				}
-				ChatRole::User => messages.push(json! ({"role": "user", "content": content})),
-				ChatRole::Assistant => messages.push(json! ({"role": "assistant", "content": content})),
-				ChatRole::Tool => {
-					return Err(Error::MessageRoleNotSupported {
-						model_info,
-						role: ChatRole::Tool,
-					})
+				MessageContent::ToolCalls(tool_calls) => {
+					let call_ids = tool_calls
+						.iter()
+						.map(|tc| {
+							json!({
+								"id": tc.id.clone(),
+								"type": "function",
+								"function": {
+									"name": tc.name.clone(),
+									"arguments": tc.arguments.to_string()
+								}
+							})
+						})
+						.collect::<Vec<_>>();
+					messages.push(json!({
+						"role": "assistant",
+						"content": null,
+						"tool_calls": call_ids
+					}));
 				}
 			}
 		}

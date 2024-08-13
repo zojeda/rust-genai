@@ -1,6 +1,7 @@
 use crate::adapter::{AdapterConfig, AdapterKind};
 use crate::chat::ChatOptions;
 use crate::resolver::AdapterKindResolver;
+use crate::tools::{GenAITool, ToolsManager};
 use crate::webc::WebClient;
 use crate::{Client, ClientConfig};
 use std::collections::HashMap;
@@ -13,6 +14,8 @@ pub struct ClientBuilder {
 	web_client: Option<WebClient>,
 
 	config: Option<ClientConfig>,
+
+	tools: Option<Vec<GenAITool>>,
 }
 
 /// Builder methods
@@ -32,6 +35,11 @@ impl ClientBuilder {
 		self.adapter_config_by_kind
 			.get_or_insert_with(HashMap::new)
 			.insert(kind, adapter_config);
+		self
+	}
+
+	pub fn with_tool(mut self, tool: GenAITool) -> Self {
+		self.tools.get_or_insert_with(Vec::new).push(tool);
 		self
 	}
 }
@@ -65,6 +73,13 @@ impl ClientBuilder {
 			web_client: self.web_client.unwrap_or_default(),
 			config: self.config.unwrap_or_default(),
 			adapter_config_by_kind: self.adapter_config_by_kind,
+			tools_manager: self.tools.map(|tools| {
+				let mut p = ToolsManager::default();
+				for tool in tools {
+					p.add(tool.specification, tool.handler);
+				}
+				p
+			}),
 		};
 		Client { inner: Arc::new(inner) }
 	}

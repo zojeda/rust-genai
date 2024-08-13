@@ -1,5 +1,6 @@
 use crate::adapter::{AdapterConfig, AdapterKind};
 use crate::chat::{ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse};
+use crate::tools::ToolsManager;
 use crate::webc::WebResponse;
 use crate::Result;
 use crate::{ConfigSet, ModelInfo};

@@ -16,5 +16,6 @@ pub use error::{Error, Result};
 pub mod adapter;
 pub mod chat;
 pub mod resolver;
+pub mod tools;
 
 // endregion: --- Modules
