@@ -1,6 +1,5 @@
 use crate::adapter::{AdapterConfig, AdapterKind};
-use crate::chat::{ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse};
-use crate::tools::ToolsManager;
+use crate::chat::{ChatOptionsSet, ChatRequest, ChatStreamResponse, MessageContent, MetaUsage};
 use crate::webc::WebResponse;
 use crate::Result;
 use crate::{ConfigSet, ModelInfo};
@@ -29,7 +28,7 @@ pub trait Adapter {
 	) -> Result<WebRequestData>;
 
 	/// To be implemented by Adapters
-	fn to_chat_response(model_info: ModelInfo, web_response: WebResponse) -> Result<ChatResponse>;
+	fn to_chat_response(model_info: ModelInfo, web_response: WebResponse) -> Result<ChatInternalResponse>;
 
 	/// To be implemented by Adapters
 	fn to_chat_stream(
@@ -48,6 +47,21 @@ pub enum ServiceType {
 }
 
 // endregion: --- ServiceType
+
+// region:    --- ChatInternalResponse
+#[derive(Debug, Clone)]
+pub enum ChatInternalResponse {
+	Content(Option<MessageContent>, MetaUsage),
+	ToolCalls(Vec<FunctionCall>),
+}
+// endregion: --- ChatInternalResponse
+
+#[derive(Debug, Clone, Default)]
+pub struct FunctionCall {
+	pub id: String,
+	pub name: String,
+	pub arguments: Value,
+}
 
 // region:    --- WebRequestData
 

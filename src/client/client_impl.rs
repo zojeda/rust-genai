@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::adapter::{Adapter, AdapterDispatcher, AdapterKind, ServiceType, WebRequestData};
+use crate::adapter::{Adapter, AdapterDispatcher, AdapterKind, ChatInternalResponse, ServiceType, WebRequestData};
 use crate::chat::{
-	ChatMessage, ChatOptions, ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse, MessageContent, Response,
+	ChatMessage, ChatOptions, ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse, MessageContent,
 };
 use crate::client::Client;
 use crate::{ConfigSet, Error, ModelInfo, Result};
@@ -84,8 +84,8 @@ impl Client {
 					webc_error,
 				})?;
 
-		let chat_res = AdapterDispatcher::to_chat_response(model_info.clone(), web_res)?;
-		if let Response::FunctionCalls(function_calls) = chat_res.response {
+		let mut chat_res = AdapterDispatcher::to_chat_response(model_info.clone(), web_res)?;
+		while let ChatInternalResponse::ToolCalls(function_calls) = chat_res {
 			let calls_manager = model_info.clone().tools.unwrap();
 			let function_call_results = function_calls
 				.iter()
@@ -109,7 +109,7 @@ impl Client {
 				&config_set,
 				ServiceType::Chat,
 				new_req,
-				options_set,
+				options_set.clone(),
 			)?;
 
 			let web_res =
@@ -120,11 +120,13 @@ impl Client {
 						model_info: model_info.clone(),
 						webc_error,
 					})?;
-			let chat_res = AdapterDispatcher::to_chat_response(model_info.clone(), web_res)?;
-			Ok(chat_res)
-		} else {
-			Ok(chat_res)
+			chat_res = AdapterDispatcher::to_chat_response(model_info.clone(), web_res)?;
 		}
+		let ChatInternalResponse::Content(content, usage) = chat_res else {
+			return Err(Error::ChatReqHasNoMessages { model_info });
+		};
+		let chat_res = ChatResponse { content, usage };
+		Ok(chat_res)
 	}
 
 	pub async fn exec_chat_stream(

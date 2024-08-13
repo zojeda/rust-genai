@@ -1,9 +1,9 @@
 use crate::adapter::openai::OpenAIStreamer;
 use crate::adapter::support::get_api_key_resolver;
-use crate::adapter::{Adapter, AdapterConfig, AdapterKind, ServiceType, WebRequestData};
+use crate::adapter::{Adapter, AdapterConfig, AdapterKind, ChatInternalResponse, FunctionCall, ServiceType, WebRequestData};
 use crate::chat::{
-	ChatOptionsSet, ChatRequest, ChatResponse, ChatRole, ChatStream, ChatStreamResponse, FunctionCall, MessageContent,
-	MessageExtra, MetaUsage, Response, ToolExtra,
+	ChatOptionsSet, ChatRequest, ChatRole, ChatStream, ChatStreamResponse, MessageContent,
+	MessageExtra, MetaUsage, ToolExtra,
 };
 use crate::support::value_ext::ValueExt;
 use crate::webc::WebResponse;
@@ -48,7 +48,7 @@ impl Adapter for OpenAIAdapter {
 		OpenAIAdapter::util_to_web_request_data(model_info, url, chat_req, service_type, chat_options, &api_key)
 	}
 
-	fn to_chat_response(_model_info: ModelInfo, web_response: WebResponse) -> Result<ChatResponse> {
+	fn to_chat_response(_model_info: ModelInfo, web_response: WebResponse) -> Result<ChatInternalResponse> {
 		let WebResponse { mut body, .. } = web_response;
 
 		let usage = body.x_take("usage").map(OpenAIAdapter::into_usage).unwrap_or_default();
@@ -73,15 +73,13 @@ impl Adapter for OpenAIAdapter {
 				})
 				.collect::<Vec<_>>();
 
-			let response = Response::FunctionCalls(function_calls);
-			Ok(ChatResponse { response, usage })
+			Ok(ChatInternalResponse::ToolCalls( function_calls ))
 		} else {
 			let content: Option<String> = first_choice.map(|mut c| c.x_take("/message/content")).transpose()?;
 
 			let content = content.map(MessageContent::from);
 
-			let response = Response::Content(content);
-			Ok(ChatResponse { response, usage })
+			Ok(ChatInternalResponse::Content(content, usage ))
 		}
 	}
 

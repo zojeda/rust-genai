@@ -1,4 +1,4 @@
-use super::FunctionCall;
+use crate::adapter::FunctionCall;
 
 /// For now, supports only Text,
 /// But the goal is to support multi-part message content (see below)

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use crate::chat::FunctionCall;
+use crate::adapter::FunctionCall;
 
 use super::ToolSpecification;
 

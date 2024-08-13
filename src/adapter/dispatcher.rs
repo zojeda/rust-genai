@@ -4,11 +4,13 @@
 // use crate::adapter::ollama::OllamaAdapter;
 use crate::adapter::openai::OpenAIAdapter;
 use crate::adapter::{Adapter, AdapterConfig, AdapterKind, ServiceType, WebRequestData};
-use crate::chat::{ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse};
+use crate::chat::{ChatOptionsSet, ChatRequest, ChatStreamResponse};
 use crate::webc::WebResponse;
 use crate::Result;
 use crate::{ConfigSet, ModelInfo};
 use reqwest::RequestBuilder;
+
+use super::ChatInternalResponse;
 
 // use super::groq::GroqAdapter;
 
@@ -80,7 +82,7 @@ impl Adapter for AdapterDispatcher {
 		}
 	}
 
-	fn to_chat_response(model_info: ModelInfo, web_response: WebResponse) -> Result<ChatResponse> {
+	fn to_chat_response(model_info: ModelInfo, web_response: WebResponse) -> Result<ChatInternalResponse> {
 		match model_info.adapter_kind {
 			AdapterKind::OpenAI => OpenAIAdapter::to_chat_response(model_info, web_response),
 			_ => OpenAIAdapter::to_chat_response(model_info, web_response),
